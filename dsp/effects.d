@@ -2,6 +2,7 @@ module dsp.effects;
 
 import dplug.core.nogc;
 import dplug.dsp.delayline;
+import dplug.dsp.iir;
 
 enum : int
 {
@@ -48,6 +49,10 @@ nothrow:
     }
 }
 
+
+
+
+
 final class EarlyEffect: NoEffect
 {
 public:
@@ -55,8 +60,8 @@ nothrow:
 @nogc:
   this()
   {
-    delayL = [0.0199, 0.0354, 0.0389, 0.0414, 0.0699, 0.0796];
-    delayR = [0.0209, 0.0364, 0.0399, 0.0424, 0.0709, 0.0806];
+    delayL = [0.0204, 0.0357, 0.0398, 0.0414, 0.0709, 0.0796];
+    delayR = [0.0204, 0.0362, 0.0390, 0.0424, 0.0699, 0.0806];
     gainL  = [1.020,   0.818,  0.635,  0.719,  0.267,  0.240];
     gainR  = [1.021,   0.820,  0.633,  0.722,  0.187,  0.243];
 
@@ -64,6 +69,9 @@ nothrow:
 
     tapLengthL = 6;
     tapLengthR = 6;
+
+    diffuseAllpassL.initialize();
+    diffuseAllpassR.initialize();
   }
   
   override void processAudio(float[] leftIn, float[] rightIn,
@@ -71,36 +79,42 @@ nothrow:
                              int frames)
   {
     debugLog("Dragonfly Reverb 4 - Process Audio!");
-    // TODO: Implement predelay?
+    // TODO:
+    // * Predelay?
+    // * Cross-channel delay/allpass
+    // * Width
+    // * LPF/HPF
 
-    for (int sample = 0; sample < frames; sample++) {
-      delayLineL.feedSample(leftIn[sample]);
-      delayLineR.feedSample(rightIn[sample]);
+    for (int f = 0; f < frames; f++) {
+      delayLineL.feedSample(leftIn[f]);
+      delayLineR.feedSample(rightIn[f]);
 
-      leftOut[sample] = 0;
-      rightOut[sample] = 0;      
+      float left = 0;
+      float right = 0;
 
       for(int i=0; i<tapLengthL; i++) {
         int delaySamples = cast(int) (delayL[i] * sampleRate);
-//        leftOut[sample] += gainL[i] * delayLineL.sampleFull(delaySamples);
-        leftOut[sample] += delayLineL.sampleFull(delaySamples);
+        left += gainL[i] * delayLineL.sampleFull(delaySamples);
       }
       
       for(int i=0; i<tapLengthR; i++) {
         int delaySamples = cast(int) (delayR[i] * sampleRate);
-//        leftOut[sample] += gainR[i] * delayLineR.sampleFull(delaySamples);
-        rightOut[sample] += delayLineR.sampleFull(delaySamples);        
+        right += gainR[i] * delayLineR.sampleFull(delaySamples);
       }
+
+      leftOut[f]  = diffuseAllpassL.nextSample(left,  diffuseAllpassCoefficient);
+      rightOut[f] = diffuseAllpassR.nextSample(right, diffuseAllpassCoefficient);
     }
   }
 
   override void reset(double sampleRate, int maxFrames)
   {
-    debugLog("Dragonfly Reverb 4 - Reset Sample Rate!");
     this.sampleRate = sampleRate;
     int maxDelaySamples = cast(int) (maxDelay * sampleRate);
     delayLineL.resize(maxDelaySamples);
     delayLineR.resize(maxDelaySamples);
+
+    diffuseAllpassCoefficient = biquadRBJAllPass(150, sampleRate);
   }
 
 private:
@@ -117,6 +131,9 @@ private:
   double sampleRate;
 
   Delayline!float delayLineL, delayLineR;
+
+  BiquadCoeff diffuseAllpassCoefficient;
+  BiquadDelay diffuseAllpassL, diffuseAllpassR;
 }
 
 final class HallEffect : NoEffect
