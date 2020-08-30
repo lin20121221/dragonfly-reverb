@@ -10,6 +10,7 @@ import dplug.core,
 import gui;
 
 import dsp.effects;
+import dsp.early;
 
 mixin(pluginEntryPoints!DragonflyReverbClient);
 
